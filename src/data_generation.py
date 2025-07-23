@@ -107,28 +107,41 @@ class GraspDatasetGenerator:
         
         candidates = []
         object_center = np.array(pos)
+        object_size = np.array(aabb_max) - np.array(aabb_min)
         
         for _ in range(num_candidates):
-            # Focus grasps around object center
-            offset_range = 0.03  # Smaller range for better grasps
-            grasp_x = object_center[0] + np.random.uniform(-offset_range, offset_range)
-            grasp_y = object_center[1] + np.random.uniform(-offset_range, offset_range)
-            grasp_z = max(aabb_min[2] + 0.02, object_center[2] + np.random.uniform(-0.02, 0.05))
-            
-            # More constrained orientations
-            roll = np.random.uniform(-np.pi/6, np.pi/6)   # ±30 degrees
-            pitch = np.random.uniform(-np.pi/6, np.pi/6)  # ±30 degrees  
-            yaw = np.random.uniform(-np.pi, np.pi)        # Full rotation
+            # Different strategies based on object type
+            if object_size[0] < 0.15 and object_size[1] < 0.15:  # Small objects
+                # Top-down grasps for small objects
+                grasp_x = object_center[0] + np.random.uniform(-0.02, 0.02)
+                grasp_y = object_center[1] + np.random.uniform(-0.02, 0.02)
+                grasp_z = aabb_max[2] + np.random.uniform(0.03, 0.08)  # Above object
+                
+                # Prefer vertical approach for small objects
+                roll = np.random.uniform(-np.pi/8, np.pi/8)   # ±22.5 degrees
+                pitch = np.random.uniform(-np.pi/8, np.pi/8)  # ±22.5 degrees
+                yaw = np.random.uniform(-np.pi, np.pi)
+            else:
+                # Side grasps for larger objects
+                offset_range = min(0.04, max(object_size[:2]) * 0.3)
+                grasp_x = object_center[0] + np.random.uniform(-offset_range, offset_range)
+                grasp_y = object_center[1] + np.random.uniform(-offset_range, offset_range)
+                grasp_z = np.random.uniform(aabb_min[2] + 0.02, aabb_max[2] + 0.05)
+                
+                roll = np.random.uniform(-np.pi/4, np.pi/4)
+                pitch = np.random.uniform(-np.pi/4, np.pi/4)
+                yaw = np.random.uniform(-np.pi, np.pi)
             
             grasp_pose = np.array([grasp_x, grasp_y, grasp_z, roll, pitch, yaw])
             
-            # Basic feasibility check
+            # Feasibility check
             if (aabb_min[0] - 0.05 <= grasp_x <= aabb_max[0] + 0.05 and
                 aabb_min[1] - 0.05 <= grasp_y <= aabb_max[1] + 0.05 and
                 grasp_z >= aabb_min[2]):
                 candidates.append(grasp_pose)
         
         return candidates
+
     
     def generate_dataset(self, total_samples=2000, output_dir="data/generated_training"):
         """Generate complete training dataset with quality control"""

@@ -248,23 +248,45 @@ class PyBulletGraspSimulation:
         return grasp_candidates
     
     def evaluate_grasp_quality(self, grasp_pose, object_id):
-        """Simple grasp quality evaluation"""
-        # Get object properties
+        """Improved grasp quality evaluation"""
         pos, orn = p.getBasePositionAndOrientation(object_id)
         aabb_min, aabb_max = p.getAABB(object_id)
         
-        # Distance to object center
         obj_center = np.array(pos)
         grasp_pos = grasp_pose[:3]
+        object_size = np.array(aabb_max) - np.array(aabb_min)
+        
+        # Distance to object center (normalized by object size)
         distance_to_center = np.linalg.norm(grasp_pos - obj_center)
+        size_normalized_distance = distance_to_center / np.linalg.norm(object_size)
         
-        # Height above table
-        height_score = grasp_pose[2] - aabb_min[2]
+        # Height appropriateness
+        if object_size[2] < 0.08:  # Small/flat objects
+            # Prefer top-down grasps
+            height_score = 1.0 if grasp_pos[2] > aabb_max[2] else 0.5
+        else:  # Taller objects
+            # Prefer mid-height grasps
+            mid_height = (aabb_min[2] + aabb_max[2]) / 2
+            height_diff = abs(grasp_pos[2] - mid_height) / object_size[2]
+            height_score = 1.0 - height_diff
         
-        # Simple scoring (higher is better)
-        quality = 1.0 / (1.0 + distance_to_center) + height_score * 0.5
+        # Approach angle penalty (prefer more vertical approaches for small objects)
+        roll, pitch = grasp_pose[3], grasp_pose[4]
+        angle_penalty = abs(roll) + abs(pitch)
+        
+        if object_size[2] < 0.08:  # Small objects
+            angle_penalty *= 2.0  # Stronger penalty for tilted grasps
+        
+        # Combined quality score
+        quality = (
+            (1.0 / (1.0 + size_normalized_distance * 2)) * 0.4 +  # Distance component
+            height_score * 0.4 +                                   # Height component
+            max(0, 1.0 - angle_penalty / np.pi) * 0.2             # Angle component
+        )
         
         return quality
+
+
     
     def select_best_grasp(self, grasp_candidates, object_id):
         """Select best grasp from candidates"""
