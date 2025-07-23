@@ -1,0 +1,47 @@
+# Training Configuration
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 50
+  device: "cuda"
+  
+# Data Generation
+data_generation:
+  num_samples_per_object: 1000
+  camera_distance: 0.6
+  distance_variance: 0.1
+  image_size: [200, 200]
+  fov: 60
+  # Add pose normalization
+  pose_normalization:
+    position_scale: 0.5   # Scale positions to [-0.5, 0.5]
+    rotation_scale: 3.14  # Scale rotations to [-π, π]
+  
+# PyBullet Objects (built-in URDF objects)
+objects:
+  - "cube.urdf"
+  - "sphere.urdf"
+  - "duck_vhacd.urdf"
+  - "teddy_vhacd.urdf"
+  - "plane.urdf"
+  - "r2d2.urdf"
+  
+# Network Architecture
+network:
+  input_channels: 1
+  conv1_filters: 64
+  conv2_filters: 64
+  fc1_size: 384
+  fc2_size: 192
+  output_size: 6
+
+# Gripper Configuration
+gripper:
+  finger_separation: 0.08
+  finger_length: 0.05
+  approach_distance: 0.15
+
+# Loss Function
+loss:
+  theta_loss: 0.2
+  omega_loss: 1.0
