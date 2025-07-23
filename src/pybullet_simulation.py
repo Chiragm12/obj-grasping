@@ -4,13 +4,14 @@ import numpy as np
 import time
 import os
 from .utils import load_config, process_depth_image, euler_to_quaternion
+from .custom_object_loader import CustomObjectLoader
 
 class PyBulletGraspSimulation:
     def __init__(self, gui=False, config_path="config/config.yaml"):
         self.config = load_config(config_path)
         self.data_config = self.config['data_generation']
         self.gripper_config = self.config['gripper']
-        
+        self.custom_loader = CustomObjectLoader()
         # Initialize PyBullet
         if gui:
             self.physics_client = p.connect(p.GUI)
@@ -285,8 +286,6 @@ class PyBulletGraspSimulation:
         )
         
         return quality
-
-
     
     def select_best_grasp(self, grasp_candidates, object_id):
         """Select best grasp from candidates"""
@@ -331,6 +330,124 @@ class PyBulletGraspSimulation:
         
         return False
     
+    def clear_objects(self):
+        """Remove all objects except the plane"""
+        num_bodies = p.getNumBodies()
+        bodies_to_remove = []
+        
+        for i in range(num_bodies):
+            body_id = p.getBodyUniqueId(i)
+            if body_id != self.plane_id:
+                bodies_to_remove.append(body_id)
+        
+        for body_id in bodies_to_remove:
+            p.removeBody(body_id)
+    def load_custom_object(self, obj_name, scale=1.0):
+        """Load a custom .obj file for testing"""
+        
+        # Clear existing objects first
+        self.clear_objects()
+        
+        # Load the custom object
+        object_id, loaded_name = self.custom_loader.load_obj_file(
+            obj_name=obj_name,
+            scale=scale,
+            mass=1.0,
+            position=[0, 0, 0.2]  # Higher position for better visibility
+        )
+        
+        if object_id is not None:
+            print(f"Loaded custom object: {loaded_name}")
+            
+            # Get object info for debugging
+            pos, orn = p.getBasePositionAndOrientation(object_id)
+            aabb_min, aabb_max = p.getAABB(object_id)
+            
+            print(f"Object position: {pos}")
+            print(f"Object AABB: {aabb_min} to {aabb_max}")
+            
+            return object_id, loaded_name
+        else:
+            print(f"Failed to load custom object: {obj_name}")
+            return None, None
+
+    def list_custom_objects(self):
+        """List available custom .obj files"""
+        return self.custom_loader.list_available_objects()
+
+    def load_specific_test_object(self, obj_name):
+        """Load a specific test object (for compatibility with test scripts)"""
+        return self.load_custom_object(obj_name, scale=1.0)
+
+    def get_custom_object_info(self, obj_name):
+        """Get information about a loaded custom object"""
+        if obj_name in self.custom_loader.loaded_objects:
+            obj_info = self.custom_loader.loaded_objects[obj_name]
+            object_id = obj_info['id']
+            
+            # Get current position and orientation
+            pos, orn = p.getBasePositionAndOrientation(object_id)
+            
+            # Get bounding box
+            aabb_min, aabb_max = p.getAABB(object_id)
+            
+            return {
+                'id': object_id,
+                'position': pos,
+                'orientation': orn,
+                'aabb_min': aabb_min,
+                'aabb_max': aabb_max,
+                'size': np.array(aabb_max) - np.array(aabb_min),
+                'path': obj_info['path'],
+                'scale': obj_info['scale'],
+                'mass': obj_info['mass']
+            }
+        
+        return None
+
+    def test_multiple_scales(self, obj_name, scales=[0.01, 0.1, 1.0, 10.0]):
+        """Test loading an object with different scales to find the best one"""
+        print(f"Testing different scales for {obj_name}:")
+        
+        successful_scales = []
+        
+        for scale in scales:
+            print(f"  Trying scale {scale}...")
+            
+            try:
+                obj_id, loaded_name = self.load_custom_object(obj_name, scale=scale)
+                
+                if obj_id is not None:
+                    # Check if object is reasonably sized
+                    aabb_min, aabb_max = p.getAABB(obj_id)
+                    size = np.array(aabb_max) - np.array(aabb_min)
+                    
+                    # Object should be between 2cm and 50cm in each dimension
+                    if all(0.02 <= s <= 0.5 for s in size):
+                        successful_scales.append((scale, size))
+                        print(f"    ✅ Scale {scale} successful - Size: {size}")
+                    else:
+                        print(f"    ⚠️ Scale {scale} loaded but size seems wrong: {size}")
+                else:
+                    print(f"    ❌ Scale {scale} failed to load")
+                    
+            except Exception as e:
+                print(f"    ❌ Scale {scale} error: {e}")
+        
+        if successful_scales:
+            # Return the scale that gives the most reasonable size (closest to 10cm)
+            target_size = 0.1
+            best_scale = min(successful_scales, 
+                            key=lambda x: abs(np.mean(x[1]) - target_size))
+            
+            print(f"\nRecommended scale for {obj_name}: {best_scale[0]}")
+            return best_scale[0]
+        else:
+            print(f"\n❌ No successful scales found for {obj_name}")
+            return None
+
+
+
     def close(self):
         """Close simulation"""
         p.disconnect()
