@@ -7,7 +7,7 @@ def test_bowl_object():
     print("=== Testing Bowl Object Grasping ===")
     
     # Check if bowl.obj exists
-    if not os.path.exists("custom_objects/bowl.obj"):
+    if not os.path.exists("custom_objects/chips_can.obj"):
         print("❌ bowl.obj not found in custom_objects/ directory")
         return
     
@@ -19,7 +19,7 @@ def test_bowl_object():
     
     # First, find the best scale for the bowl
     print("Finding optimal scale for bowl...")
-    best_scale = sim.test_multiple_scales('bowl')
+    best_scale = sim.test_multiple_scales('chips_can')
     
     if best_scale is None:
         print("❌ Could not find working scale for bowl")
@@ -36,7 +36,7 @@ def test_bowl_object():
         print(f"\n--- Test {test_num + 1}/{total_tests} ---")
         
         # Load bowl object
-        obj_id, obj_name = sim.load_custom_object('bowl', scale=best_scale)
+        obj_id, obj_name = sim.load_custom_object('chips_can', scale=best_scale)
         
         if obj_id is None:
             print("Failed to load bowl")
